@@ -58,10 +58,28 @@
   }
 
   async function loadShop() {
-    const d = await getData('/item-shop.data?_routes=routes%2Fitem-shop._index');
+    const [d, jam] = await Promise.all([
+      getData('/item-shop.data?_routes=routes%2Fitem-shop._index'),
+      getData('/item-shop/jam-tracks.data?_routes=routes%2Fitem-shop.jam-tracks._index'),
+    ]);
     const data = d?.['routes/item-shop._index']?.data;
     if (!data) throw new Error("Couldn't read the Item Shop");
-    return { loggedIn: data.isLoggedIn !== false, offers: collectOffers(data) };
+    const tracks = jam?.['routes/item-shop.jam-tracks._index']?.data?.jamTracks;
+    if (!Array.isArray(tracks)) throw new Error("Couldn't read the full Jam Tracks listing");
+    const offers = new Map(collectOffers(data).map((o) => [o.offerId, o]));
+    for (const track of tracks) {
+      const sale = track.forSale;
+      if (!sale?.offerId || !sale.pricing) continue;
+      offers.set(sale.offerId, {
+        ...offers.get(sale.offerId),
+        ...sale,
+        title: track.title,
+        assetType: track.assetType,
+        ownershipStatus: track.ownershipStatus,
+        image: { sm: track.media?.albumArtUrl },
+      });
+    }
+    return { loggedIn: data.isLoggedIn !== false, offers: [...offers.values()] };
   }
 
   async function getCsrf() {
